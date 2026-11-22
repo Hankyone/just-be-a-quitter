@@ -1,423 +1,388 @@
+import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var searchText = ""
-
-    private var filteredApps: [InstalledAppInfo] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.isEmpty == false else {
-            return appState.installedApps
-        }
-
-        return appState.installedApps.filter { app in
-            app.displayName.localizedCaseInsensitiveContains(query) ||
-            app.bundleID.localizedCaseInsensitiveContains(query)
-        }
-    }
-
-    private var runningApps: [InstalledAppInfo] {
-        filteredApps.filter(\.isRunning)
-    }
-
-    private var installedOnlyApps: [InstalledAppInfo] {
-        filteredApps.filter { $0.isRunning == false }
-    }
 
     var body: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-                .ignoresSafeArea()
+        VStack(spacing: 0) {
+            HeaderView()
+                .padding(.horizontal, 20)
+                .padding(.top, 34)
+                .padding(.bottom, 14)
 
-            Group {
-                if appState.hasAccessibilityAccess {
-                    mainView
-                } else {
-                    permissionGate
-                }
-            }
-            .animation(.easeInOut(duration: 0.18), value: appState.hasAccessibilityAccess)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var permissionGate: some View {
-        VStack {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(AutoQuitBackgroundApp.appName)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-
-                Text("Grant Accessibility access once, then the app stays quietly in the background.")
-                    .font(.title3.weight(.medium))
-
-                VStack(alignment: .leading, spacing: 12) {
-                    PermissionStep(
-                        title: "Open the Accessibility settings",
-                        detail: "macOS will jump to the right System Settings panel."
-                    )
-                    PermissionStep(
-                        title: "Enable Just Be a Quitter",
-                        detail: "Turn the switch on so the watcher can detect last-window changes."
-                    )
-                    PermissionStep(
-                        title: "Return here and confirm",
-                        detail: "As soon as permission is granted, this setup screen disappears."
-                    )
-                }
-                .padding(.top, 4)
-
-                HStack(spacing: 10) {
-                    Button("Open Accessibility Access") {
-                        appState.requestAccessibilityAccess()
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("Check Again") {
-                        appState.recheckAccessibilityAccess()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Spacer()
-
-                    Button("Quit") {
-                        appState.quitApplication()
-                    }
-                }
-            }
-            .padding(28)
-            .frame(maxWidth: 560, alignment: .leading)
-            .background(panelBackground)
-            .overlay(panelBorder)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-    }
-
-    private var mainView: some View {
-        VStack(spacing: 14) {
-            topBar
-
-            HStack(alignment: .top, spacing: 14) {
-                trackedPane
-                    .frame(width: 290)
-                    .frame(maxHeight: .infinity)
-
-                libraryPane
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var topBar: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(AutoQuitBackgroundApp.appName)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-
-                Text("Watch selected apps and quit them when their last window closes.")
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 12)
-
-            Toggle("Monitoring", isOn: $appState.monitoringEnabled)
-                .toggleStyle(.switch)
-                .fixedSize()
-
-            Button("Refresh") {
-                appState.refreshLibrary()
-            }
-            .buttonStyle(.bordered)
-
-            Button("Quit") {
-                appState.quitApplication()
-            }
-            .buttonStyle(.bordered)
-            .keyboardShortcut("q", modifiers: [.command, .option])
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(panelBackground)
-        .overlay(panelBorder)
-    }
-
-    private var trackedPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            paneHeader(
-                title: "Watching",
-                subtitle: "Tracked apps and their quit delay."
-            )
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    if appState.trackedApps.isEmpty {
-                        emptyState("No tracked apps yet.")
-                    } else {
-                        ForEach(appState.trackedApps) { trackedApp in
-                            TrackedAppRow(
-                                trackedApp: trackedApp,
-                                onToggleEnabled: { appState.setEnabled($0, for: trackedApp.bundleID) },
-                                onChangeDelay: { appState.setQuitDelay($0, for: trackedApp.bundleID) },
-                                onRemove: { appState.removeTrackedApp(bundleID: trackedApp.bundleID) }
-                            )
-                        }
-                    }
-
-                    Divider()
-                        .padding(.vertical, 4)
-
-                    DisclosureGroup("Manual Bundle ID") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            TextField("com.apple.Preview", text: $appState.manualBundleID)
-                                .textFieldStyle(.roundedBorder)
-
-                            TextField("Display name (optional)", text: $appState.manualDisplayName)
-                                .textFieldStyle(.roundedBorder)
-
-                            Button("Add App") {
-                                appState.addManualApp()
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(appState.manualBundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                        .padding(.top, 8)
-                    }
-                }
-                .padding(12)
-            }
-            .scrollIndicators(.automatic)
-        }
-        .padding(12)
-        .background(panelBackground)
-        .overlay(panelBorder)
-    }
-
-    private var libraryPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                paneHeader(
-                    title: "Applications",
-                    subtitle: "Running apps first, then everything installed."
-                )
-
-                Spacer(minLength: 8)
-
-                TextField("Search apps or bundle IDs", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 260)
-            }
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    if runningApps.isEmpty == false {
-                        librarySection(title: "Running Now", apps: runningApps)
-                    }
-
-                    librarySection(
-                        title: runningApps.isEmpty ? "All Applications" : "Installed",
-                        apps: installedOnlyApps
-                    )
-                }
-                .padding(12)
-            }
-            .scrollIndicators(.automatic)
-        }
-        .padding(12)
-        .background(panelBackground)
-        .overlay(panelBorder)
-    }
-
-    @ViewBuilder
-    private func librarySection(title: String, apps: [InstalledAppInfo]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.headline)
-
-                Spacer()
-
-                Text("\(apps.count)")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-
-            if apps.isEmpty {
-                emptyState("No apps match the current search.")
+            if appState.hasAccessibilityAccess {
+                WatchListView()
+                Divider()
+                FooterView()
             } else {
-                ForEach(apps) { app in
-                    AppLibraryRow(
-                        app: app,
-                        isTracked: appState.isTracked(bundleID: app.bundleID),
-                        onAdd: { appState.addInstalledApp(app) }
-                    )
-                }
+                PermissionView()
             }
         }
-    }
-
-    private func paneHeader(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.headline)
-
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func emptyState(_ text: String) -> some View {
-        Text(text)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private var panelBackground: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(Color(nsColor: .underPageBackgroundColor))
-    }
-
-    private var panelBorder: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        .frame(minWidth: 560, minHeight: 460)
+        .ignoresSafeArea(edges: .top)
+        .background(.background)
+        .animation(.easeInOut(duration: 0.2), value: appState.hasAccessibilityAccess)
     }
 }
 
-private struct PermissionStep: View {
-    let title: String
-    let detail: String
+// MARK: - Header
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.headline)
+private struct HeaderView: View {
+    @EnvironmentObject private var appState: AppState
 
-            Text(detail)
-                .foregroundStyle(.secondary)
+    private var status: (text: String, color: Color) {
+        if appState.hasAccessibilityAccess == false {
+            return ("Needs Accessibility access", .orange)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-private struct TrackedAppRow: View {
-    let trackedApp: TrackedApp
-    let onToggleEnabled: (Bool) -> Void
-    let onChangeDelay: (Double) -> Void
-    let onRemove: () -> Void
-
-    private var delayLabel: String {
-        if trackedApp.quitDelaySeconds == floor(trackedApp.quitDelaySeconds) {
-            return "\(Int(trackedApp.quitDelaySeconds))s"
+        if appState.monitoringEnabled == false {
+            return ("Paused", .secondary)
         }
-
-        return String(format: "%.2gs", trackedApp.quitDelaySeconds)
+        let count = appState.trackedApps.filter(\.isEnabled).count
+        if count == 0 {
+            return ("Add an app to get started", .secondary)
+        }
+        return ("Watching \(count) app\(count == 1 ? "" : "s")", .green)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(trackedApp.displayName)
-                        .font(.headline)
-                        .lineLimit(1)
-
-                    Text(trackedApp.bundleID)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                Button("Remove", role: .destructive, action: onRemove)
-                    .buttonStyle(.borderless)
-            }
-
-            HStack {
-                Toggle("Enabled", isOn: Binding(
-                    get: { trackedApp.isEnabled },
-                    set: { onToggleEnabled($0) }
-                ))
-                .toggleStyle(.switch)
-
-                Spacer()
-            }
-
-            HStack(spacing: 10) {
-                Text("Delay")
-                    .foregroundStyle(.secondary)
-
-                Stepper(
-                    value: Binding(
-                        get: { trackedApp.quitDelaySeconds },
-                        set: { onChangeDelay(min(max($0, 0), 5)) }
-                    ),
-                    in: 0 ... 5,
-                    step: 0.25
-                ) {
-                    Text(delayLabel)
-                        .monospacedDigit()
-                }
-            }
-            .font(.subheadline)
-        }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-private struct AppLibraryRow: View {
-    let app: InstalledAppInfo
-    let isTracked: Bool
-    let onAdd: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(nsImage: app.icon)
+        HStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
-                .frame(width: 28, height: 28)
-                .cornerRadius(6)
+                .frame(width: 48, height: 48)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text(app.displayName)
-                        .font(.headline)
-                        .lineLimit(1)
-
-                    if app.isRunning {
-                        Text("Running")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.green)
-                    }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(JustBeAQuitter.appName)
+                    .font(.title2.weight(.semibold))
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(status.color)
+                        .frame(width: 7, height: 7)
+                    Text(status.text)
+                        .foregroundStyle(.secondary)
                 }
-
-                Text(app.bundleID)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                .font(.callout)
             }
 
             Spacer()
 
-            if isTracked {
-                Text("Watching")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            } else {
-                Button("Watch", action: onAdd)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+            if appState.hasAccessibilityAccess {
+                Toggle("Watching", isOn: $appState.monitoringEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .help(appState.monitoringEnabled ? "Pause quitting apps" : "Resume quitting apps")
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Watch list
+
+private struct WatchListView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var selection = Set<String>()
+    @State private var isAddingApps = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("Quit these apps when their last window closes")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+
+            Table(appState.trackedApps, selection: $selection) {
+                TableColumn("App") { app in
+                    HStack(spacing: 8) {
+                        Image(nsImage: appState.icon(for: app.bundleID))
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                        Text(app.displayName)
+                            .foregroundStyle(app.isEnabled ? .primary : .secondary)
+                            .lineLimit(1)
+                        if appState.isRunning(app.bundleID) {
+                            Text("Open")
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(.quaternary, in: Capsule())
+                        }
+                    }
+                    .help(app.bundleID)
+                }
+
+                TableColumn("Quit") { app in
+                    Picker("Quit", selection: Binding(
+                        get: { app.quitDelaySeconds },
+                        set: { appState.setQuitDelay($0, for: app.bundleID) }
+                    )) {
+                        ForEach(TrackedApp.delayOptions, id: \.self) { seconds in
+                            Text(TrackedApp.label(forDelay: seconds)).tag(seconds)
+                        }
+                    }
+                    .labelsHidden()
+                    .disabled(app.isEnabled == false)
+                }
+                .width(min: 110, ideal: 120, max: 140)
+
+                TableColumn("On") { app in
+                    Toggle("On", isOn: Binding(
+                        get: { app.isEnabled },
+                        set: { appState.setEnabled($0, for: app.bundleID) }
+                    ))
+                    .labelsHidden()
+                }
+                .width(32)
+            }
+            .tableStyle(.inset(alternatesRowBackgrounds: false))
+            .contextMenu(forSelectionType: String.self) { ids in
+                Button("Stop Watching") { appState.remove(bundleIDs: ids) }
+            }
+            .onDeleteCommand { removeSelection() }
+            .overlay {
+                if appState.trackedApps.isEmpty {
+                    ContentUnavailableView {
+                        Label("No apps yet", systemImage: "macwindow.badge.plus")
+                    } description: {
+                        Text("Add apps like Preview or QuickTime Player and they'll quit when you close their last window.")
+                    } actions: {
+                        Button("Add Apps…") { isAddingApps = true }
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    isAddingApps = true
+                } label: {
+                    Label("Add Apps", systemImage: "plus")
+                }
+                .popover(isPresented: $isAddingApps, arrowEdge: .bottom) {
+                    AddAppsView()
+                        .environmentObject(appState)
+                }
+
+                Button {
+                    removeSelection()
+                } label: {
+                    Label("Remove", systemImage: "minus")
+                }
+                .disabled(selection.isEmpty)
+
+                Spacer()
+            }
+            .controlSize(.regular)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+    }
+
+    private func removeSelection() {
+        appState.remove(bundleIDs: selection)
+        selection = []
+    }
+}
+
+// MARK: - Add apps popover
+
+private struct AddAppsView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var query = ""
+
+    private var matches: [InstalledAppInfo] {
+        let query = query.trimmingCharacters(in: .whitespaces)
+        guard query.isEmpty == false else { return appState.installedApps }
+        return appState.installedApps.filter {
+            $0.displayName.localizedCaseInsensitiveContains(query) || $0.bundleID.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        let running = matches.filter { appState.isRunning($0.bundleID) }
+        let others = matches.filter { appState.isRunning($0.bundleID) == false }
+
+        VStack(spacing: 0) {
+            TextField("Search apps", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .padding(12)
+
+            Divider()
+
+            if appState.installedApps.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    if running.isEmpty == false {
+                        Section("Open now") { rows(running) }
+                    }
+                    Section(running.isEmpty ? "Apps" : "Other apps") { rows(others) }
+                }
+                .listStyle(.sidebar)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Choose Other App…", action: chooseApp)
+                Spacer()
+            }
+            .padding(10)
+        }
+        .frame(width: 340, height: 440)
+    }
+
+    @ViewBuilder
+    private func rows(_ apps: [InstalledAppInfo]) -> some View {
+        ForEach(apps) { app in
+            let isTracked = appState.isTracked(app.bundleID)
+            Button {
+                if isTracked {
+                    appState.remove(bundleIDs: [app.bundleID])
+                } else {
+                    appState.add(app)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(nsImage: appState.icon(for: app.bundleID))
+                        .resizable()
+                        .frame(width: 20, height: 20)
+                    Text(app.displayName)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: isTracked ? "checkmark.circle.fill" : "plus.circle")
+                        .foregroundStyle(isTracked ? Color.accentColor : Color.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(app.bundleID)
+        }
+    }
+
+    private func chooseApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = true
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = "Watch"
+        guard panel.runModal() == .OK else { return }
+        panel.urls.forEach(appState.addApp(at:))
+    }
+}
+
+// MARK: - Footer
+
+private struct FooterView: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        HStack(spacing: 10) {
+            agentStatus
+            Spacer(minLength: 12)
+            lastQuit
+        }
+        .font(.callout)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private var agentStatus: some View {
+        switch appState.agentStatus {
+        case .enabled:
+            Label("Starts at login", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.secondary)
+                .help("Runs in the background, opens at login and restarts itself if it ever stops unexpectedly.")
+        case .requiresApproval:
+            Label("Allow in Login Items to start at login", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Button("Open Settings") { appState.openLoginItemsSettings() }
+                .controlSize(.small)
+        default:
+            Label("Doesn't start at login", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Button("Turn On") { appState.enableBackgroundAgent() }
+                .controlSize(.small)
+        }
+
+        Button("Quit…") { confirmQuit() }
+            .controlSize(.small)
+            .buttonStyle(.link)
+            .foregroundStyle(.secondary)
+            .help("Stop watching until you open the app again or log in")
+    }
+
+    @ViewBuilder
+    private var lastQuit: some View {
+        if let event = appState.recentQuits.first {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                Text("Quit \(event.displayName) \(Self.relative(event.date, now: context.date))")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .help(appState.recentQuits.map { "\($0.displayName) at \($0.date.formatted(date: .omitted, time: .shortened))" }.joined(separator: "\n"))
+        }
+    }
+
+    private static func relative(_ date: Date, now: Date) -> String {
+        if now.timeIntervalSince(date) < 60 { return "just now" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: now)
+    }
+
+    private func confirmQuit() {
+        let alert = NSAlert()
+        alert.messageText = "Stop watching apps?"
+        alert.informativeText = "Apps won't quit on their own until you open \(JustBeAQuitter.appName) again or log in."
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            appState.quitApplication()
+        }
+    }
+}
+
+// MARK: - Permission
+
+private struct PermissionView: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            Image(systemName: "hand.raised.square.on.square")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(.tint)
+
+            VStack(spacing: 6) {
+                Text("Allow Accessibility access")
+                    .font(.title3.weight(.semibold))
+                Text("It's how the app sees when an app's last window closes. Turn on \(JustBeAQuitter.appName) in System Settings → Privacy & Security → Accessibility.")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 380)
+            }
+
+            Button("Open System Settings") { appState.requestAccessibilityAccess() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Waiting for access…")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
