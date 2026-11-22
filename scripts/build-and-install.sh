@@ -28,8 +28,9 @@ SIGN_IDENTITY="${SIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk
 ')}"
 
 if [[ -z "$SIGN_IDENTITY" ]]; then
-  echo "No signing identity found. Set SIGN_IDENTITY manually and rerun."
-  exit 1
+  echo "No developer certificate found; signing ad hoc."
+  echo "macOS may ask for Accessibility access again after each rebuild."
+  SIGN_IDENTITY="-"
 fi
 
 if ! command -v trash >/dev/null 2>&1; then

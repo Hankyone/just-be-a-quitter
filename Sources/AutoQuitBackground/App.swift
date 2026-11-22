@@ -147,7 +147,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.orderFrontRegardless()
         RunLoop.main.run(until: Date().addingTimeInterval(1.5))
 
-        guard let view = window.contentView,
+        guard let view = window.contentView?.superview ?? window.contentView,
               let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: bitmap)
         try? bitmap.representation(using: .png, properties: [:])?.write(to: url)
