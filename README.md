@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Hankyone/just-be-a-quitter/releases/latest/download/Just-Be-a-Quitter.dmg"><b>Download for Mac</b></a> · macOS 15 or later
+</p>
+
+<p align="center">
   <img src="assets/screenshot.png" width="720" alt="Just Be a Quitter settings window">
 </p>
 
@@ -25,12 +29,20 @@ Open the app from Spotlight or your Applications folder any time to add apps or 
 
 ## Install
 
-Requires macOS 15 or later and Xcode.
+1. [Download the DMG](https://github.com/Hankyone/just-be-a-quitter/releases/latest/download/Just-Be-a-Quitter.dmg), open it, and drag the app into Applications.
+2. Open Just Be a Quitter and allow Accessibility access when asked.
+3. Add the apps you want it to quit. That's it.
+
+It's signed and notarized by Apple, so it opens without security warnings.
+
+## Build from source
+
+Requires Xcode.
 
 ```sh
-git clone https://github.com/Hankyone/just-be-a-quitter.git
-cd just-be-a-quitter
 ./scripts/build-and-install.sh
 ```
 
-The script builds the app, signs it (with your Apple developer certificate if you have one), and installs it to `/Applications`.
+## License
+
+MIT

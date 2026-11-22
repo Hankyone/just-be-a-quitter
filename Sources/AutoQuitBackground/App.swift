@@ -29,11 +29,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             exit(0)
         }
 
+        if Installer.isRunningFromDiskImage {
+            Installer.offerToMoveToApplications()
+            exit(0)
+        }
+
         let quietLaunch = CommandLine.arguments.contains("--background")
         let shouldShowWindow = BackgroundAgent.wasLaunchedByAgent == false && quietLaunch == false
 
         if let other = InstanceMessage.otherRunningInstance() {
-            if BackgroundAgent.wasLaunchedByAgent {
+            if BackgroundAgent.wasLaunchedByAgent || Installer.isOutdated(other) {
                 // launchd's copy always wins so crash recovery stays in place.
                 InstanceMessage.yield.post()
                 Self.waitForExit(of: other.processIdentifier)
